@@ -1,0 +1,301 @@
+--==============================================================
+-- KIELHUB // NETWORK & PING BOOSTER + ENCRYPTED KEY SYSTEM
+-- Place this LocalScript inside StarterGui
+-- Name it: KielHubNetwork
+--==============================================================
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Save original settings
+local origShadows = Lighting.GlobalShadows
+local origFogEnd = Lighting.FogEnd
+local origDiffuse = Lighting.EnvironmentDiffuseScale
+local origSpecular = Lighting.EnvironmentSpecularScale
+
+local isBoostEnabled = false
+local boostPercent = 0
+
+--==============================================================
+-- 🔒 ENCRYPTED KEYS (Hidden from plain sight)
+--==============================================================
+local encryptedData = {
+    {75, 105, 101, 108, 45, 78, 69, 84, 49, 45, 50, 48, 50, 52}, 
+    {75, 105, 101, 108, 45, 78, 69, 84, 50, 45, 50, 48, 50, 52}, 
+    {75, 105, 101, 108, 45, 78, 69, 84, 51, 45, 50, 48, 50, 52}, 
+    {75, 105, 101, 108, 45, 78, 69, 84, 52, 45, 50, 48, 50, 52}, 
+    {75, 105, 101, 108, 45, 78, 69, 84, 53, 45, 50, 48, 50, 52}  
+}
+
+local decryptedKeys = {}
+for _, byteArray in ipairs(encryptedData) do
+    local str = ""
+    for _, b in ipairs(byteArray) do
+        str = str .. string.char(b)
+    end
+    table.insert(decryptedKeys, str)
+end
+
+--==============================================================
+-- 1. MOVABLE REAL PING DISPLAY
+--==============================================================
+local pingGui = Instance.new("ScreenGui")
+pingGui.Name = "KielPingDisplay"
+pingGui.ResetOnSpawn = false
+pingGui.IgnoreGuiInset = true
+pingGui.Parent = playerGui
+
+local pingFrame = Instance.new("Frame")
+pingFrame.AnchorPoint = Vector2.new(1, 0)
+pingFrame.Position = UDim2.new(1, -20, 0, 20)
+pingFrame.Size = UDim2.new(0, 200, 0, 50) 
+pingFrame.BackgroundTransparency = 1 
+pingFrame.BorderSizePixel = 0
+pingFrame.Visible = false 
+pingFrame.Parent = pingGui
+
+local pingText = Instance.new("TextLabel")
+pingText.Size = UDim2.new(1, 0, 1, 0)
+pingText.BackgroundTransparency = 1
+pingText.Font = Enum.Font.GothamBold 
+pingText.Text = "Ping : 0"
+pingText.TextColor3 = Color3.fromRGB(255, 255, 255)
+pingText.TextSize = 32 
+pingText.RichText = true 
+pingText.Parent = pingFrame
+
+local textStroke = Instance.new("UIStroke")
+textStroke.Color = Color3.fromRGB(0, 0, 0) 
+textStroke.Thickness = 3
+textStroke.Parent = pingText
+
+-- Draggable Logic
+local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+pingFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = pingFrame.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+    end
+end)
+pingFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        pingFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Real Ping Calculation Loop
+RunService.RenderStepped:Connect(function()
+    local pingValue = math.floor(player:GetNetworkPing() * 1000)
+    pingText.Text = string.format('<font color="#FF0000">Ping</font> : <font color="#2AFF00">%d</font> ms', pingValue)
+end)
+
+--==============================================================
+-- 2. RAYFIELD UI SETUP (With Decrypted Key System)
+--==============================================================
+local Window = Rayfield:CreateWindow({
+    Name = "KielHub Network",
+    LoadingTitle = "Loading network interface...",
+    LoadingSubtitle = "By : KielFps",
+    ConfigurationSaving = { 
+        Enabled = true, 
+        FolderName = "KielHubNetwork", 
+        FileName = "NetworkConfig" 
+    },
+    
+    KeySystem = true,
+    KeySettings = {
+        Title = "KielHub Network Key",
+        Subtitle = "Enter your access key",
+        Note = "5 Permanent Keys Available",
+        FileName = "KielNetworkKey",
+        SaveKey = true, 
+        GrabKeyFromSite = false,
+        Key = decryptedKeys -- Uses the decrypted keys from above
+    }
+})
+
+-- MAIN TAB
+local Tab = Window:CreateTab("Network", 4483362458)
+local Section = Tab:CreateSection("Connection Settings")
+
+local uiPingToggle = Tab:CreateToggle({
+    Name = "Show Ping Display",
+    CurrentValue = false,
+    Flag = "ShowPingDisplay",
+    Callback = function(Value)
+        pingFrame.Visible = Value
+        Rayfield:Notify({Title = "Ping Display", Content = Value and "Enabled" or "Disabled", Duration = 3})
+    end,
+})
+
+local uiBoostToggle = Tab:CreateToggle({
+    Name = "Enable Client Optimizer",
+    CurrentValue = false,
+    Flag = "NetworkBoostToggle",
+    Callback = function(Value)
+        isBoostEnabled = Value
+        if not isBoostEnabled then
+            Lighting.GlobalShadows = origShadows
+            Lighting.FogEnd = origFogEnd
+            Lighting.EnvironmentDiffuseScale = origDiffuse
+            Lighting.EnvironmentSpecularScale = origSpecular
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+            Rayfield:Notify({Title = "Optimizer", Content = "Settings restored", Duration = 3})
+        else
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 100000
+            Rayfield:Notify({Title = "Optimizer", Content = "Client optimization enabled", Duration = 3})
+        end
+    end,
+})
+
+local uiBoostSlider = Tab:CreateSlider({
+    Name = "Optimization Level",
+    Range = {0, 100},
+    Increment = 1,
+    Suffix = "%",
+    CurrentValue = 0,
+    Flag = "NetworkBoostSlider",
+    Callback = function(Value)
+        boostPercent = Value
+        if isBoostEnabled then
+            local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            TweenService:Create(Lighting, tweenInfo, {
+                EnvironmentDiffuseScale = math.max(0, 1 - (boostPercent / 100)),
+                EnvironmentSpecularScale = math.max(0, 1 - (boostPercent / 100))
+            }):Play()
+            
+            if boostPercent >= 50 then
+                settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then 
+                        v.Enabled = false 
+                    end
+                end
+            else
+                settings().Rendering.QualityLevel = Enum.QualityLevel.Level04
+            end
+        end
+    end,
+})
+
+Tab:CreateButton({
+    Name = "Clear Visual Lag (Flush)",
+    Callback = function()
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then 
+                v.Enabled = false 
+            end
+        end
+        Rayfield:Notify({Title = "Success", Content = "Visual lag cleared", Duration = 3})
+    end,
+})
+
+Tab:CreateButton({
+    Name = "Reset Network Settings",
+    Callback = function()
+        Lighting.GlobalShadows = origShadows
+        Lighting.FogEnd = origFogEnd
+        Lighting.EnvironmentDiffuseScale = origDiffuse
+        Lighting.EnvironmentSpecularScale = origSpecular
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+        Rayfield:Notify({Title = "Reset", Content = "Settings restored to default", Duration = 3})
+    end,
+})
+
+-- CONFIG TAB
+local ConfigTab = Window:CreateTab("Config", 4483362458)
+local ConfigSection = ConfigTab:CreateSection("Share & Save Settings")
+
+local codeInput = ConfigTab:CreateInput({
+    Name = "Settings Code",
+    PlaceholderText = "Paste code here...",
+    RemoveTextAfterFocusLost = false,
+    Flag = "ConfigCode",
+    Callback = function(Text) end,
+})
+
+ConfigTab:CreateButton({
+    Name = "Apply Code",
+    Callback = function()
+        local code = codeInput:Get()
+        if code and code ~= "" then
+            local success, err = pcall(function()
+                local decodedJson = HttpService:Base64Decode(code)
+                local data = HttpService:JSONDecode(decodedJson)
+                
+                if data.ShowPing ~= nil then
+                    uiPingToggle:Set(data.ShowPing)
+                end
+                
+                if data.OptimizeEnabled ~= nil then
+                    uiBoostToggle:Set(data.OptimizeEnabled)
+                end
+                
+                if data.OptimizeLevel ~= nil then
+                    uiBoostSlider:Set(data.OptimizeLevel)
+                end
+                
+                Rayfield:Notify({Title = "Config Applied", Content = "Network settings loaded!", Duration = 3})
+            end)
+            
+            if not success then
+                Rayfield:Notify({Title = "Error", Content = "Invalid config code!", Duration = 3})
+            end
+        else
+            Rayfield:Notify({Title = "Error", Content = "Please paste a code first.", Duration = 3})
+        end
+    end,
+})
+
+ConfigTab:CreateButton({
+    Name = "Generate & Copy Code",
+    Callback = function()
+        local settingsTable = {
+            ShowPing = pingFrame.Visible,
+            OptimizeEnabled = isBoostEnabled,
+            OptimizeLevel = boostPercent
+        }
+        
+        local jsonString = HttpService:JSONEncode(settingsTable)
+        local encodedCode = HttpService:Base64Encode(jsonString)
+        
+        codeInput:Set(encodedCode)
+        if setclipboard then
+            setclipboard(encodedCode)
+            Rayfield:Notify({Title = "Code Generated", Content = "Code copied to clipboard!", Duration = 3})
+        else
+            Rayfield:Notify({Title = "Code Generated", Content = "Code placed in the box", Duration = 3})
+        end
+    end,
+})
+
+ConfigTab:CreateButton({
+    Name = "Save to File",
+    Callback = function()
+        Rayfield:SaveConfiguration()
+        Rayfield:Notify({Title = "Saved", Content = "Settings saved to file!", Duration = 3})
+    end,
+})
+
+ConfigTab:CreateButton({
+    Name = "Load from File",
+    Callback = function()
+        Rayfield:LoadConfiguration()
+        Rayfield:Notify({Title = "Loaded", Content = "Settings loaded from file!", Duration = 3})
+    end,
+})
+
+Rayfield:LoadConfiguration()
